@@ -1,0 +1,1 @@
+If after starting from suspend or hibernation, pytorch seems to have a problem communicating with CUDA. Restart the system before doing anything else. 

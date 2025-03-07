@@ -1,0 +1,9 @@
+hydra-core
+numpy librosa moviepy python-docx tqdm soundfile
+demucs
+lhotse
+transformers
+jiwer
+webdataset
+datasets
+editdistance IPython

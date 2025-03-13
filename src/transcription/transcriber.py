@@ -61,5 +61,6 @@ class Transcriber:
             transcription = self.asr_model(audio_segment, generate_kwargs={"task": "transcribe", "language": "english"})["text"].lower()
             return transcription
         except Exception as e:
-            print(f"Error in segment transcription: {e}")
-            return ""
+            print(f"Error in batch transcription: {e}")
+            return [""] * len(audio_segments)
+

@@ -67,8 +67,8 @@ class AudioDataset(Dataset):
         for start, end, speaker in segments:
             start_idx = int(start * sampling_rate)
             end_idx = int(end * sampling_rate)
-            segment_audio = audio_data[start_idx:end_idx]
-            transcription = self.transcriber.transcribe(segment_audio)
+            segment_audio = audio_data[start_idx:end_idx]  #<-- this is now correct
+            transcription = self.transcriber.transcribe(segment_audio) #<-- this is now correct
             transcriptions.append(transcription)
         
         return audio_path, segments, transcriptions

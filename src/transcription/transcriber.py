@@ -4,7 +4,7 @@ import torchaudio
 from transformers import pipeline
 from src.utils.gpu_utils import get_device
 from src.config.config import Config
-
+import numpy as np
 
 class Transcriber:
     def __init__(self, config: Config, model_dir):
@@ -35,32 +35,30 @@ class Transcriber:
                 device=self.device,
             )
 
-    def transcribe(self, audio_segment: torch.Tensor) -> str:
+    def transcribe(self, audio_segment: np.ndarray) -> str:
         """
         Transcribes the given audio segment.
 
         Args:
-            audio_segment: The audio segment as a torch.Tensor.
+            audio_segment: The audio segment as a numpy.ndarray.
 
         Returns:
             The transcription as a string.
         """
         return self.transcribe_segment(audio_segment)
 
-    def transcribe_segment(self, audio_segment: torch.Tensor) -> str:
+    def transcribe_segment(self, audio_segment: np.ndarray) -> str:
         """
         Transcribes a segment of the given audio file.
 
         Args:
-            audio_segment: The segment of the audio file as a tensor.
+            audio_segment: The segment of the audio file as a numpy.ndarray.
 
         Returns:
             The transcription as a string.
         """
         try:
-            temp_audio_file = os.path.join(self.temp_dir, "temp_audio_segment.wav")
-            torchaudio.save(temp_audio_file, audio_segment.unsqueeze(0).cpu(), 16000)
-            transcription = self.asr_model(temp_audio_file, generate_kwargs={"task": "transcribe", "language": "english"})["text"].lower()
+            transcription = self.asr_model(audio_segment, generate_kwargs={"task": "transcribe", "language": "english"})["text"].lower()
             return transcription
         except Exception as e:
             print(f"Error in segment transcription: {e}")

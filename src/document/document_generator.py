@@ -57,7 +57,7 @@ def generate_transcript_document(transcript_items):
     normal_style.font.size = Pt(12)
     
     # Title for the document
-    doc.add_heading("All Transcripts", level=1)
+    doc.add_heading("AI Generated Transcripts", level=1)
     
     # Table of Contents Section
     doc.add_heading("Table of Contents", level=2)
@@ -91,7 +91,7 @@ def generate_transcript_document(transcript_items):
                 speaker_label = int(speaker.split('_')[1]) + 1 if '_' in speaker else speaker
             except (IndexError, ValueError):
                 speaker_label = speaker
-            doc.add_paragraph(f"Speaker {speaker_label}: [{segment_start_time}] {transcription}")
+            doc.add_paragraph(f"{speaker_label}: [{segment_start_time}] {transcription}")
         
         doc.add_page_break()
     

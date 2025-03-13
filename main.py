@@ -127,8 +127,16 @@ def main():
     # Convert audio file paths to dictionaries that pyannote.audio expects
     audio_files_to_process_dicts = [{"audio": file_path} for file_path in audio_files_to_process]
     audio_dataset = AudioDataset(audio_files_to_process_dicts, diarizer, transcriber, config)
-    # Create the DataLoader
-    data_loader = DataLoader(audio_dataset, batch_size=1, shuffle=False)
+    
+    def custom_collate(batch):
+        return batch[0]  # just return the batch as-is, without torch collating
+
+    data_loader = DataLoader(
+        audio_dataset,
+        batch_size=1,   # Keep batch_size=1 per audio file to simplify handling
+        shuffle=False,
+        collate_fn=custom_collate
+    )
 
     # Data Structure for Document Generation
     transcript_items = []
@@ -165,7 +173,10 @@ def main():
         segments_data = []
         for j in range(len(segments)):
             start_time, end_time, speaker = segments[j]
-            transcription = transcriptions[j]
+            # Get the transcription dictionary for the current segment
+            transcription_dict = transcriptions[j]
+            # Extract the transcription text from the dictionary
+            transcription = transcription_dict
             print(f"\rTranscribing file {i + 1} of {num_files} - Finished with segment {j + 1}/{len(segments)}", end="")
             segment_start_time = f"{int(start_time // 3600):02d}:{int((start_time % 3600) // 60):02d}:{int(start_time % 60):02d}"
 

@@ -1,7 +1,7 @@
 import os
 import torch
 import torchaudio
-from transformers import pipeline
+from transformers import pipeline, AutoTokenizer
 from src.utils.gpu_utils import get_device
 from src.config.config import Config
 import numpy as np
@@ -34,6 +34,7 @@ class Transcriber:
                 model=model_path,
                 device=self.device,
             )
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
 
     def transcribe(self, audio_segment: np.ndarray) -> str:
         """
@@ -47,19 +48,29 @@ class Transcriber:
         """
         return self.transcribe_segment(audio_segment)
 
-    def transcribe_segment(self, audio_segment: np.ndarray) -> str:
-        """
-        Transcribes a segment of the given audio file.
-
-        Args:
-            audio_segment: The segment of the audio file as a numpy.ndarray.
-
-        Returns:
-            The transcription as a string.
-        """
+    def transcribe_batch(self, audio_segments: list[np.ndarray], sampling_rate: int = 16000) -> list[str]:
+        transcriptions = []
         try:
-            transcription = self.asr_model(audio_segment, generate_kwargs={"task": "transcribe", "language": "english"})["text"].lower()
-            return transcription
+            inputs = [{"array": audio_segment, "sampling_rate": sampling_rate} for audio_segment in audio_segments]
+            
+            results = self.asr_model(
+                inputs,
+                batch_size=len(audio_segments),
+                generate_kwargs={
+                    "task": "transcribe",
+                    "language": "english",
+                    "return_timestamps": True,
+                }
+            )
+
+            for result in results:
+                raw_text = result["text"]
+                sentences = raw_text.strip().split('. ')
+                formatted_text = '. '.join([sentence.capitalize() for sentence in sentences])
+                transcriptions.append(formatted_text)
+
+            return transcriptions
+
         except Exception as e:
             print(f"Error in batch transcription: {e}")
             return [""] * len(audio_segments)

@@ -43,12 +43,6 @@ class AudioDataset(Dataset):
             print(f"Warning: Skipped processing of empty audio file: {audio_path}")
             return audio_path, [], []
 
-        # Pad or truncate the audio
-        if len(audio_data) < self.audio_samples_per_segment:
-            audio_data = np.pad(audio_data, (0, self.audio_samples_per_segment - len(audio_data)))
-        else:
-            audio_data = audio_data[: self.audio_samples_per_segment]
-
         # Change to mono if needed
         if len(audio_data.shape) > 1:
             audio_data = np.mean(audio_data, axis=1)
@@ -62,13 +56,13 @@ class AudioDataset(Dataset):
         # Diarization: now pass the dictionary to the diarizer
         segments = self.diarizer.diarize(diarization_input)
 
-        # Transcription: process each segment on the original audio_data
-        transcriptions = []
-        for start, end, speaker in segments:
-            start_idx = int(start * sampling_rate)
-            end_idx = int(end * sampling_rate)
-            segment_audio = audio_data[start_idx:end_idx]  #<-- this is now correct
-            transcription = self.transcriber.transcribe(segment_audio) #<-- this is now correct
-            transcriptions.append(transcription)
+        # Prepare segments in a list
+        segment_audios = [
+            audio_data[int(start * sampling_rate):int(end * sampling_rate)]
+            for start, end, _ in segments
+        ]
+
+        # Batch transcription (efficient)
+        transcriptions = self.transcriber.transcribe_batch(segment_audios, sampling_rate)
         
         return audio_path, segments, transcriptions

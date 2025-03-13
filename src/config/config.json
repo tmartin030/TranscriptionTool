@@ -1,6 +1,6 @@
 {
   "diarization_model": "pyannote/speaker-diarization-3.1",
-  "asr_model": "openai/whisper-large-v3-turbo",
+  "asr_model": "openai/whisper-large-v3",
   "AV_input_dir": "data/audio_video_input",
   "transcripts_dir": "data/transcripts",
   "diarization_model_dir": "models/diarization",

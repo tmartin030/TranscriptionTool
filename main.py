@@ -128,14 +128,10 @@ def main():
     audio_files_to_process_dicts = [{"audio": file_path} for file_path in audio_files_to_process]
     audio_dataset = AudioDataset(audio_files_to_process_dicts, diarizer, transcriber, config)
     
-    def custom_collate(batch):
-        return batch[0]  # just return the batch as-is, without torch collating
-
     data_loader = DataLoader(
         audio_dataset,
         batch_size=1,   # Keep batch_size=1 per audio file to simplify handling
         shuffle=False,
-        collate_fn=custom_collate
     )
 
     # Data Structure for Document Generation
@@ -176,7 +172,7 @@ def main():
             # Get the transcription dictionary for the current segment
             transcription_dict = transcriptions[j]
             # Extract the transcription text from the dictionary
-            transcription = transcription_dict
+            transcription = transcription_dict["transcription"]
             print(f"\rTranscribing file {i + 1} of {num_files} - Finished with segment {j + 1}/{len(segments)}", end="")
             segment_start_time = f"{int(start_time // 3600):02d}:{int((start_time % 3600) // 60):02d}:{int(start_time % 60):02d}"
 

@@ -14,7 +14,6 @@ class AudioDataset(Dataset):
         self.diarizer = diarizer
         self.transcriber = transcriber
         self.config = config
-        self.audio_samples_per_segment = config.get("audio_samples_per_segment", 30 * 16000)
 
     def __len__(self):
         return len(self.audio_files)
@@ -65,4 +64,14 @@ class AudioDataset(Dataset):
         # Batch transcription (efficient)
         transcriptions = self.transcriber.transcribe_batch(segment_audios, sampling_rate)
         
-        return audio_path, segments, transcriptions
+        # Associate each transcription with its segment
+        transcription_dicts = []
+        for (start, end, speaker), transcription in zip(segments, transcriptions):
+            transcription_dicts.append({
+                "start": start,
+                "end": end,
+                "speaker": speaker,
+                "transcription": transcription
+            })
+
+        return audio_path, segments, transcription_dicts

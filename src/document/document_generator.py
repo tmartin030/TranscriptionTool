@@ -91,7 +91,7 @@ def generate_transcript_document(transcript_items):
                 speaker_label = int(speaker.split('_')[1]) + 1 if '_' in speaker else speaker
             except (IndexError, ValueError):
                 speaker_label = speaker
-            doc.add_paragraph(f"{speaker_label}: [{segment_start_time}] {transcription}")
+            doc.add_paragraph(f"{speaker_label}: {segment_start_time} {transcription}") # Removed () [] ''
         
         doc.add_page_break()
     

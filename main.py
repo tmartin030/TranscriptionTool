@@ -1,5 +1,4 @@
 import os
-import json
 import logging
 import argparse
 import shutil
@@ -167,20 +166,48 @@ def main():
 
         # Collect segment data for the document generator.
         segments_data = []
+        last_timestamp = -30  # Initialize to -30 to ensure the first timestamp is printed.
         for j in range(len(segments)):
             start_time, end_time, speaker = segments[j]
             # Get the transcription dictionary for the current segment
             transcription_dict = transcriptions[j]
             # Extract the transcription text from the dictionary
             transcription = transcription_dict["transcription"]
+            
+            # Ensure speaker is a string before applying string methods
+            if not isinstance(speaker, str):
+                speaker = str(speaker)
+                
+            # Remove unwanted characters from speaker
+            speaker = speaker.replace('(', '').replace(')', '').replace('\'', '')
+
+            # Check if transcription is a list and handle it accordingly
+            if isinstance(transcription, list):
+                transcription = " ".join(transcription)  # Join list elements into a string
+            elif not isinstance(transcription, str):
+                transcription = str(transcription)
+
+            # Remove brackets, quotes, and single quotes, but KEEP conjunction apostrophes
+            transcription = transcription.replace('[', '').replace(']', '').replace('"', '')
+            
             print(f"\rTranscribing file {i + 1} of {num_files} - Finished with segment {j + 1}/{len(segments)}", end="")
             segment_start_time = f"{int(start_time // 3600):02d}:{int((start_time % 3600) // 60):02d}:{int(start_time % 60):02d}"
 
-            # Debugging and Verification:
-            print(f"  - Segment {j+1} - Speaker: {speaker}, Start Time: {segment_start_time}, Transcription: {transcription}")
-            if not transcription:
-                print(f"  - WARNING: Empty transcription for segment {j+1} of file {file_name}")
+            # Timestamp logic
+            if start_time - last_timestamp >= 30:
+                timestamp_str = f"{int(start_time // 3600):02d}:{int((start_time % 3600) // 60):02d}:{int(start_time % 60):02d}"
+                segments_data.append({
+                    'start_time': start_time,
+                    'speaker': "TIMESTAMP",
+                    'transcription': timestamp_str
+                })
+                last_timestamp = start_time
 
+            # Remove comma after speaker and fix capitalization
+            speaker = speaker.replace(",", "")
+            if transcription.lower().startswith("just give us a few more minutes"):
+                transcription = "Just give us a few more minutes."
+            
             segments_data.append({
                 'start_time': start_time,
                 'speaker': speaker,

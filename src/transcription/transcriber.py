@@ -5,6 +5,8 @@ from transformers import pipeline, AutoTokenizer
 from src.utils.gpu_utils import get_device
 from src.config.config import Config
 import numpy as np
+import spacy
+import re
 
 class Transcriber:
     def __init__(self, config: Config, model_dir):
@@ -35,6 +37,13 @@ class Transcriber:
                 device=self.device,
             )
         self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        # Load a pre-trained spaCy model for English
+        try:
+            self.nlp = spacy.load("en_core_web_sm")
+        except OSError:
+            print("Downloading en_core_web_sm model for spaCy...")
+            spacy.cli.download("en_core_web_sm")
+            self.nlp = spacy.load("en_core_web_sm")
 
     def transcribe(self, audio_segment: np.ndarray) -> str:
         """
@@ -47,6 +56,24 @@ class Transcriber:
             The transcription as a string.
         """
         return self.transcribe_segment(audio_segment)
+
+    def recase_text(self, text):
+        """
+        Recases the text using spaCy's NER capabilities.
+        """
+        doc = self.nlp(text)
+        tokens = []
+        for token in doc:
+            # Capitalize token if it's a recognized proper noun or at the beginning of a sentence
+            if token.ent_type_ or token.i == 0 or token.nbor(-1).text in {".", "!", "?"}:
+                tokens.append(token.text.capitalize())
+            elif token.text.lower() == "i":
+                tokens.append("I")
+            else:
+                tokens.append(token.text)
+        text = " ".join(tokens)
+        text = re.sub(r'\s+([.,?!])', r'\1', text) # Remove spaces before punctuation
+        return text
 
     def transcribe_batch(self, audio_segments: list[np.ndarray], sampling_rate: int = 16000) -> list[str]:
         transcriptions = []
@@ -64,8 +91,7 @@ class Transcriber:
 
             for result in results:
                 raw_text = result["text"]
-                sentences = raw_text.strip().split('. ')
-                formatted_text = '. '.join([sentence.capitalize() for sentence in sentences])
+                formatted_text = self.recase_text(raw_text)
                 transcriptions.append(formatted_text)
 
             return transcriptions

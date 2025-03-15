@@ -5,6 +5,10 @@
   "transcripts_dir": "data/transcripts",
   "diarization_model_dir": "models/diarization",
   "asr_model_dir": "models/asr",
+  "nlp_model": "facebook/bart-large-cnn",
+  "nlp_model_dir": "models/nlp",
+  "nlp_cleaning_prompt": "Clean the following transcript by removing filler words like 'uh' and 'hmm', removing unnecessary punctuation (such as trailing commas, quotes, and brackets), and italicize any extraneous speech (e.g., background chatter). Ensure the cleaned transcript remains coherent.",
+  "nlp_summary_prompt": "Summarize the following transcript and include a brief overview of the video/audio content along with a summary of any cleaning edits performed.",
   "output_dir": "data/transcripts",
   "temp_dir": "data/temp",
   "nemo_model_dir":"models/nemo"

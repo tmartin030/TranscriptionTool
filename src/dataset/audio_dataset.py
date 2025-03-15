@@ -9,11 +9,12 @@ class AudioDataset(Dataset):
     A PyTorch dataset for processing audio files. It loads the audio, pads/truncates it, converts to mono,
     and then performs diarization and transcription.
     """
-    def __init__(self, audio_files, diarizer, transcriber, config):
+    def __init__(self, audio_files, diarizer, transcriber, config, nlp_engine = None):
         self.audio_files = audio_files
         self.diarizer = diarizer
         self.transcriber = transcriber
         self.config = config
+        self.nlp_engine = nlp_engine
 
     def __len__(self):
         return len(self.audio_files)
@@ -67,11 +68,24 @@ class AudioDataset(Dataset):
         # Associate each transcription with its segment
         transcription_dicts = []
         for (start, end, speaker), transcription in zip(segments, transcriptions):
+            # Ensure transcription is always a string
+            if isinstance(transcription, list):
+                transcription = " ".join(transcription)
+            elif not isinstance(transcription, str):
+                transcription = str(transcription)
+            print(f"Raw transcription: {transcription}")
+            if self.nlp_engine:
+                cleaned_transcript = self.nlp_engine.clean_transcript(transcription) # Corrected line
+                print(f"Cleaned transcription: {cleaned_transcript}")
+            else:
+                print(f"Skipping nlp cleaning")
+                cleaned_transcript = transcription
             transcription_dicts.append({
                 "start": start,
                 "end": end,
                 "speaker": speaker,
-                "transcription": transcription
+                "transcription": transcription,
+                "cleaned_transcription": cleaned_transcript,
             })
 
         return audio_path, segments, transcription_dicts

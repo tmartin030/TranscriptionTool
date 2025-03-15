@@ -6,14 +6,22 @@ import torch
 from datetime import datetime
 import subprocess
 from tqdm import tqdm
+import sys
 
-from torch.utils.data import DataLoader
+# Get the absolute path to the project root directory
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__)))
+
+# Add the project root to sys.path
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from src.transcription.transcriber import Transcriber
 from src.transcription.diarizer import Diarizer
 from src.config.config import Config
 from src.dataset.audio_dataset import AudioDataset
 from src.document.document_generator import generate_transcript_document
+from src.processing.nlp_postprocessing import NLPEngine
+from torch.utils.data import DataLoader, Dataset
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -64,6 +72,19 @@ def extract_audio(video_path, output_path):
         print(f"An unexpected error occurred: {e}")
         raise
 
+class SummaryDataset(Dataset):
+    def __init__(self, transcript_items, nlp_engine):
+        self.transcript_items = transcript_items
+        self.nlp_engine = nlp_engine
+
+    def __len__(self):
+        return len(self.transcript_items)
+
+    def __getitem__(self, idx):
+        item = self.transcript_items[idx]
+        all_transcript_text = " ".join([seg['cleaned_transcription'] if isinstance(seg['cleaned_transcription'], str) else str(seg['cleaned_transcription']) for seg in item['segments'] if seg['speaker'] != "TIMESTAMP"])
+        return all_transcript_text, item
+
 def main():
     parser = argparse.ArgumentParser(description="Transcription Tool")
     args = parser.parse_args()
@@ -73,6 +94,7 @@ def main():
 
     diarizer = Diarizer(config, config.get("diarization_model_dir"))
     transcriber = Transcriber(config, config.get("asr_model_dir"))
+    nlp_engine = NLPEngine(config, config.get("nlp_model_dir"))
 
     AV_input_dir = config.get("AV_input_dir")
     temp_dir = config.get("temp_dir")
@@ -125,9 +147,9 @@ def main():
     # Create the dataset using the temp audio files and audio_files_to_process
     # Convert audio file paths to dictionaries that pyannote.audio expects
     audio_files_to_process_dicts = [{"audio": file_path} for file_path in audio_files_to_process]
-    audio_dataset = AudioDataset(audio_files_to_process_dicts, diarizer, transcriber, config)
+    audio_dataset = AudioDataset(audio_files_to_process_dicts, diarizer, transcriber, config, nlp_engine)
     
-    data_loader = DataLoader(
+    audio_data_loader = DataLoader(
         audio_dataset,
         batch_size=1,   # Keep batch_size=1 per audio file to simplify handling
         shuffle=False,
@@ -135,9 +157,9 @@ def main():
 
     # Data Structure for Document Generation
     transcript_items = []
-    num_files = len(data_loader)
+    num_files = len(audio_data_loader)
 
-    for i, (file_name_item, segments, transcriptions) in enumerate(data_loader):
+    for i, (file_name_item, segments, transcriptions) in enumerate(audio_data_loader):
         # Unwrap file_name_item if it’s a list or tuple.
         if isinstance(file_name_item, (list, tuple)):
             file_name_item = file_name_item[0]
@@ -173,6 +195,7 @@ def main():
             transcription_dict = transcriptions[j]
             # Extract the transcription text from the dictionary
             transcription = transcription_dict["transcription"]
+            cleaned_transcription = transcription_dict["cleaned_transcription"]
             
             # Ensure speaker is a string before applying string methods
             if not isinstance(speaker, str):
@@ -199,7 +222,8 @@ def main():
                 segments_data.append({
                     'start_time': start_time,
                     'speaker': "TIMESTAMP",
-                    'transcription': timestamp_str
+                    'transcription': timestamp_str,
+                    'cleaned_transcription': timestamp_str
                 })
                 last_timestamp = start_time
 
@@ -211,17 +235,32 @@ def main():
             segments_data.append({
                 'start_time': start_time,
                 'speaker': speaker,
-                'transcription': transcription
+                'transcription': transcription,
+                'cleaned_transcription': cleaned_transcription
             })
         
         transcript_items.append({
             'file_path': original_filename,
             'header_text': header_text,
             'transcription_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'segments': segments_data
+            'segments': segments_data,
         })
 
         print(f"\nTranscription completed for {file_name} ({i + 1}/{num_files} files completed)")
+    
+    summary_dataset = SummaryDataset(transcript_items, nlp_engine)
+    summary_data_loader = DataLoader(summary_dataset, batch_size=1)
+    for all_transcript_text, item in tqdm(summary_data_loader, desc="Generating Summaries"):
+        # Split the transcript into chunks
+        max_length = 300
+        print(f"Generating summary for {item['file_path']}")
+        chunks = [all_transcript_text[i:i + max_length] for i in range(0, len(all_transcript_text), max_length)]
+        summaries = []
+        for chunk in chunks:
+            summary = nlp_engine.generate_summary(chunk)
+            summaries.append(summary)
+        summary = " ".join(summaries)
+        item['summary'] = summary
 
     try:
         # Generate the document using the new function.

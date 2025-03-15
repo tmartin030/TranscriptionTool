@@ -85,7 +85,7 @@ class Transcriber:
                 generate_kwargs={
                     "task": "transcribe",
                     "language": "english",
-                    "return_timestamps": True,
+                    "return_timestamps": False,
                 }
             )
 

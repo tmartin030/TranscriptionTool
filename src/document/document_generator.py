@@ -6,6 +6,7 @@ from docx.shared import Pt
 from docx.oxml.ns import qn
 from docx.oxml.shared import OxmlElement
 from docx.opc.constants import RELATIONSHIP_TYPE as RT
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 def add_hyperlink(paragraph, run_text, bookmark):
     """Add a hyperlink to a bookmark in the given paragraph."""
@@ -45,7 +46,8 @@ def generate_transcript_document(transcript_items):
             - 'file_path': The original file name or identifier.
             - 'header_text': A header for the transcript.
             - 'transcription_date': A date string.
-            - 'segments': A list of segments, each with keys 'start_time', 'speaker', 'transcription'.
+            - 'segments': A list of segments, each with keys 'start_time', 'speaker', 'transcription', cleaned_transcription.
+            - 'summary'
     
     Returns:
         Document: A docx Document object with all the transcripts.
@@ -74,10 +76,20 @@ def generate_transcript_document(transcript_items):
         file_path = item.get('file_path', 'Unknown File')
         transcription_date = item.get('transcription_date', datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
         segments = item.get('segments', [])
+        summary = item.get("summary", None)
         
         header = doc.add_heading(header_text, level=1)
         bookmark = header_text.replace(" ", "_")
         add_bookmark(header, bookmark)
+        
+        if summary:
+            summary_header = doc.add_heading(level=2)
+            summary_header.add_run("Summary:")
+            summary_header.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            summary_paragraph = doc.add_paragraph(style="Normal")
+            summary_paragraph.add_run(summary)
+        else:
+            summary = "No Summary Available"
         
         doc.add_paragraph(f"Audio File: {file_path}")
         doc.add_paragraph(f"Transcription Date: {transcription_date}")
@@ -86,12 +98,14 @@ def generate_transcript_document(transcript_items):
             start_time = seg.get('start_time', 0.0)
             speaker = seg.get('speaker', 'Unknown')
             transcription = seg.get('transcription', '')
+            cleaned_transcription = seg.get("cleaned_transcription", "")
             segment_start_time = f"{int(start_time // 3600):02d}:{int((start_time % 3600) // 60):02d}:{int(start_time % 60):02d}"
             try:
                 speaker_label = int(speaker.split('_')[1]) + 1 if '_' in speaker else speaker
             except (IndexError, ValueError):
                 speaker_label = speaker
-            doc.add_paragraph(f"{speaker_label}: {segment_start_time} {transcription}") # Removed () [] ''
+            doc.add_paragraph(f"{speaker_label}: {segment_start_time} Raw Transcription: {transcription}") # Removed () [] ''
+            doc.add_paragraph(f"Cleaned Transcription: {cleaned_transcription}")
         
         doc.add_page_break()
     

@@ -3,13 +3,13 @@ import logging
 import argparse
 import shutil
 import torch
+import whisper  # Import the whisper library
 from datetime import datetime
 import subprocess
 from tqdm import tqdm
 
 from torch.utils.data import DataLoader
 
-from src.transcription.transcriber import Transcriber
 from src.transcription.diarizer import Diarizer
 from src.config.config import Config
 from src.dataset.audio_dataset import AudioDataset
@@ -18,6 +18,9 @@ from src.document.document_generator import generate_transcript_document
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+# Load the Whisper model globally
+model = whisper.load_model("large", device="cuda" if torch.cuda.is_available() else "cpu")
 
 def extract_audio(video_path, output_path):
     """
@@ -64,6 +67,27 @@ def extract_audio(video_path, output_path):
         print(f"An unexpected error occurred: {e}")
         raise
 
+def transcribe_audio(audio_path):
+    """
+    Transcribes audio using the Whisper model.
+
+    Args:
+        audio_path: Path to the audio file.
+
+    Returns:
+        The transcription result from Whisper.
+    """
+    print("Transcribing audio...")
+    result = model.transcribe(
+        audio_path,
+        language="en",  # Specify language explicitly, helps to improve transcription accuracy
+        temperature=0.0, # Set temperature to 0.0 for best results. A value of 0.0 means the model will take the most likely prediction at each step, minimizing variability. Higher values introduce more creative or diverse results but may reduce accuracy.
+        compression_ratio_threshold=2.4, # This helps handle text with high compression ratios (e.g., gibberish or highly repetitive text). If the generated text exceeds this ratio, it may be discarded to ensure quality. Lower this value if you're getting overly compressed outputs.
+        logprob_threshold=-1.0, # Set the log probability threshold. A lower value will increase the number of words transcribed but may also increase the number of errors. A higher value will reduce the number of words transcribed but may also reduce the number of errors.
+        no_speech_threshold=0.3 # Set the threshold for no speech detection. A higher value will reduce the number of false positives but may also reduce the
+    )
+    return result
+
 def main():
     parser = argparse.ArgumentParser(description="Transcription Tool")
     args = parser.parse_args()
@@ -72,7 +96,7 @@ def main():
     config = Config(config_file)
 
     diarizer = Diarizer(config, config.get("diarization_model_dir"))
-    transcriber = Transcriber(config, config.get("asr_model_dir"))
+    #transcriber = Transcriber(config, config.get("asr_model_dir")) # Removed custom transcriber
 
     AV_input_dir = config.get("AV_input_dir")
     temp_dir = config.get("temp_dir")
@@ -125,7 +149,7 @@ def main():
     # Create the dataset using the temp audio files and audio_files_to_process
     # Convert audio file paths to dictionaries that pyannote.audio expects
     audio_files_to_process_dicts = [{"audio": file_path} for file_path in audio_files_to_process]
-    audio_dataset = AudioDataset(audio_files_to_process_dicts, diarizer, transcriber, config)
+    audio_dataset = AudioDataset(audio_files_to_process_dicts, diarizer, config) # Removed transcriber
     
     data_loader = DataLoader(
         audio_dataset,
@@ -137,7 +161,7 @@ def main():
     transcript_items = []
     num_files = len(data_loader)
 
-    for i, (file_name_item, segments, transcriptions) in enumerate(data_loader):
+    for i, (file_name_item, segments) in enumerate(data_loader): # Removed transcriptions and _
         # Unwrap file_name_item if it’s a list or tuple.
         if isinstance(file_name_item, (list, tuple)):
             file_name_item = file_name_item[0]
@@ -167,12 +191,13 @@ def main():
         # Collect segment data for the document generator.
         segments_data = []
         last_timestamp = -30  # Initialize to -30 to ensure the first timestamp is printed.
+        
+        # Transcribe the entire audio file
+        transcription_result = transcribe_audio(file_name)
+        full_transcription = transcription_result["text"]
+
         for j in range(len(segments)):
             start_time, end_time, speaker = segments[j]
-            # Get the transcription dictionary for the current segment
-            transcription_dict = transcriptions[j]
-            # Extract the transcription text from the dictionary
-            transcription = transcription_dict["transcription"]
             
             # Ensure speaker is a string before applying string methods
             if not isinstance(speaker, str):
@@ -180,15 +205,6 @@ def main():
                 
             # Remove unwanted characters from speaker
             speaker = speaker.replace('(', '').replace(')', '').replace('\'', '')
-
-            # Check if transcription is a list and handle it accordingly
-            if isinstance(transcription, list):
-                transcription = " ".join(transcription)  # Join list elements into a string
-            elif not isinstance(transcription, str):
-                transcription = str(transcription)
-
-            # Remove brackets, quotes, and single quotes, but KEEP conjunction apostrophes
-            transcription = transcription.replace('[', '').replace(']', '').replace('"', '')
             
             print(f"\rTranscribing file {i + 1} of {num_files} - Finished with segment {j + 1}/{len(segments)}", end="")
             segment_start_time = f"{int(start_time // 3600):02d}:{int((start_time % 3600) // 60):02d}:{int(start_time % 60):02d}"
@@ -205,13 +221,20 @@ def main():
 
             # Remove comma after speaker and fix capitalization
             speaker = speaker.replace(",", "")
-            if transcription.lower().startswith("just give us a few more minutes"):
-                transcription = "Just give us a few more minutes."
+            
+            # Extract the segment's transcription from the full transcription
+            segment_transcription = ""
+            for segment in transcription_result["segments"]:
+                if segment["start"] >= start_time and segment["end"] <= end_time:
+                    segment_transcription += segment["text"] + " "
+            
+            if segment_transcription.lower().startswith("just give us a few more minutes"):
+                segment_transcription = "Just give us a few more minutes."
             
             segments_data.append({
                 'start_time': start_time,
                 'speaker': speaker,
-                'transcription': transcription
+                'transcription': segment_transcription.strip()
             })
         
         transcript_items.append({

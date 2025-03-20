@@ -1,77 +1,58 @@
 import os
-import numpy as np
-import soundfile as sf
 import torch
-from torch.utils.data import Dataset  # Import PyTorch's Dataset class
+import torchaudio
+from torch.utils.data import Dataset
+from src.config.config import Config
+from src.transcription.diarizer import Diarizer
+import numpy as np
 
 class AudioDataset(Dataset):
-    """
-    A PyTorch dataset for processing audio files. It loads the audio, pads/truncates it, converts to mono,
-    and then performs diarization and transcription.
-    """
-    def __init__(self, audio_files, diarizer, transcriber, config):
+    def __init__(self, audio_files: list, diarizer: Diarizer, config: Config):
         self.audio_files = audio_files
         self.diarizer = diarizer
-        self.transcriber = transcriber
         self.config = config
+        self.temp_dir = config.get("temp_dir")
+        self.sampling_rate = 16000
+        self.audio_cache = {}
 
     def __len__(self):
         return len(self.audio_files)
 
-    def __getitem__(self, idx: int):
-        audio_item = self.audio_files[idx]
-        # If the audio_item is a dict, extract the file path from the "audio" key
-        if isinstance(audio_item, dict):
-            audio_path = audio_item.get("audio")
+    def __getitem__(self, idx):
+        file_name_item = self.audio_files[idx]
+        if isinstance(file_name_item, dict):
+            file_name = file_name_item.get("audio")
+        elif isinstance(file_name_item, str):
+            file_name = file_name_item
         else:
-            audio_path = audio_item
+            raise ValueError(f"Invalid file name item: {file_name_item}")
 
-        # Ensure audio_path is a string
-        if not isinstance(audio_path, str):
-            print(f"Warning: Audio path is not a string: {audio_path}")
-            return audio_path, [], []
+        if file_name in self.audio_cache:
+            audio_data = self.audio_cache[file_name]
+        else:
+            waveform, sample_rate = torchaudio.load(file_name)
+            audio_data = {
+                "waveform": waveform,
+                "sample_rate": sample_rate
+            }
+            self.audio_cache[file_name] = audio_data
 
-        try:
-            audio_data, sampling_rate = sf.read(audio_path)
-        except Exception as e:
-            print(f"Warning: Error reading audio file: {audio_path} - {e}")
-            return audio_path, [], []
+        waveform = audio_data["waveform"]
+        sample_rate = audio_data["sample_rate"]
 
-        # Handle empty audio files
-        if len(audio_data) == 0:
-            print(f"Warning: Skipped processing of empty audio file: {audio_path}")
-            return audio_path, [], []
+        # Resample if necessary
+        if sample_rate != self.sampling_rate:
+            resampler = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=self.sampling_rate)
+            waveform = resampler(waveform)
 
-        # Change to mono if needed
-        if len(audio_data.shape) > 1:
-            audio_data = np.mean(audio_data, axis=1)
+        # Convert to mono if necessary
+        if waveform.shape[0] > 1:
+            waveform = torch.mean(waveform, dim=0, keepdim=True)
 
-        # Convert the numpy array to a torch tensor and add a channel dimension (1, time)
-        audio_tensor = torch.tensor(audio_data, dtype=torch.float32).unsqueeze(0)
+        # Convert to numpy array
+        audio_array = waveform.squeeze().numpy()
 
-        # Create the input dictionary for diarization
-        diarization_input = {"waveform": audio_tensor, "sample_rate": sampling_rate}
+        # Diarize the audio
+        segments = self.diarizer.diarize(file_name_item)
 
-        # Diarization: now pass the dictionary to the diarizer
-        segments = self.diarizer.diarize(diarization_input)
-
-        # Prepare segments in a list
-        segment_audios = [
-            audio_data[int(start * sampling_rate):int(end * sampling_rate)]
-            for start, end, _ in segments
-        ]
-
-        # Batch transcription (efficient)
-        transcriptions = self.transcriber.transcribe_batch(segment_audios, sampling_rate)
-        
-        # Associate each transcription with its segment
-        transcription_dicts = []
-        for (start, end, speaker), transcription in zip(segments, transcriptions):
-            transcription_dicts.append({
-                "start": start,
-                "end": end,
-                "speaker": speaker,
-                "transcription": transcription
-            })
-
-        return audio_path, segments, transcription_dicts
+        return file_name_item, segments # Removed None

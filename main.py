@@ -82,7 +82,7 @@ def transcribe_audio(audio_path):
         audio_path,
         language="en",  # Specify language explicitly, helps to improve transcription accuracy
         temperature=0.0, # Set temperature to 0.0 for best results. A value of 0.0 means the model will take the most likely prediction at each step, minimizing variability. Higher values introduce more creative or diverse results but may reduce accuracy.
-        compression_ratio_threshold=2.4, # This helps handle text with high compression ratios (e.g., gibberish or highly repetitive text). If the generated text exceeds this ratio, it may be discarded to ensure quality. Lower this value if you're getting overly compressed outputs.
+        compression_ratio_threshold=2.1, # This helps handle text with high compression ratios (e.g., gibberish or highly repetitive text). If the generated text exceeds this ratio, it may be discarded to ensure quality. Lower this value if you're getting overly compressed outputs.
         logprob_threshold=-1.0, # Set the log probability threshold. A lower value will increase the number of words transcribed but may also increase the number of errors. A higher value will reduce the number of words transcribed but may also reduce the number of errors.
         no_speech_threshold=0.3 # Set the threshold for no speech detection. A higher value will reduce the number of false positives but may also reduce the
     )
@@ -190,7 +190,7 @@ def main():
 
         # Collect segment data for the document generator.
         segments_data = []
-        last_timestamp = -30  # Initialize to -30 to ensure the first timestamp is printed.
+        # last_timestamp = -30  # Removed last timestamp
         
         # Transcribe the entire audio file
         transcription_result = transcribe_audio(file_name)
@@ -209,15 +209,15 @@ def main():
             print(f"\rTranscribing file {i + 1} of {num_files} - Finished with segment {j + 1}/{len(segments)}", end="")
             segment_start_time = f"{int(start_time // 3600):02d}:{int((start_time % 3600) // 60):02d}:{int(start_time % 60):02d}"
 
-            # Timestamp logic
-            if start_time - last_timestamp >= 30:
-                timestamp_str = f"{int(start_time // 3600):02d}:{int((start_time % 3600) // 60):02d}:{int(start_time % 60):02d}"
-                segments_data.append({
-                    'start_time': start_time,
-                    'speaker': "TIMESTAMP",
-                    'transcription': timestamp_str
-                })
-                last_timestamp = start_time
+            # Timestamp logic Removed
+            # if start_time - last_timestamp >= 30:
+            #     timestamp_str = f"{int(start_time // 3600):02d}:{int((start_time % 3600) // 60):02d}:{int(start_time % 60):02d}"
+            #     segments_data.append({
+            #         'start_time': start_time,
+            #         'speaker': "TIMESTAMP",
+            #         'transcription': timestamp_str
+            #     })
+            #     last_timestamp = start_time
 
             # Remove comma after speaker and fix capitalization
             speaker = speaker.replace(",", "")
@@ -233,7 +233,7 @@ def main():
             
             segments_data.append({
                 'start_time': start_time,
-                'speaker': speaker,
+                'speaker': f"Speaker {speaker}", # Added speaker
                 'transcription': segment_transcription.strip()
             })
         
